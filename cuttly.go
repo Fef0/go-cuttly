@@ -23,9 +23,58 @@ type URL struct {
 	Title     string `json:"title"`
 }
 
-// Response contains the URL information
+// Devices contains devices information
+type Devices struct {
+	Dev []struct {
+		Tag    string `json:"tag"`
+		Clicks string `json:"clicks"`
+	} `json:"dev"`
+	Sys []struct {
+		Tag    string `json:"tag"`
+		Clicks string `json:"clicks"`
+	} `json:"sys"`
+	Bro []struct {
+		Tag    string `json:"tag"`
+		Clicks string `json:"clicks"`
+	} `json:"bro"`
+}
+
+// Refs contains references information
+type Refs []struct {
+	Link   string `json:"link"`
+	Clicks string `json:"clicks"`
+}
+
+// Stats contains all the information about a Stats query
+// Devices and Refs are declared as interface because they are served
+// both as object or array, depending on url conditions
+// i.e A just created url will come packed with empty Devices and Refs,
+// that are passed as empty array (for no logical reason, but that's a server side issue)
+// An old and already clicked url will come packed with populated Devices and Refs
+// that are passed as an object (which would be the normal thing to do)
+type Stats struct {
+	Status     int         `json:"status"`
+	Clicks     string      `json:"clicks"`
+	Date       string      `json:"date"`
+	Title      string      `json:"title"`
+	FullLink   string      `json:"fullLink"`
+	ShortLink  string      `json:"shortLink"`
+	Facebook   int         `json:"facebook"`
+	Twitter    int         `json:"twitter"`
+	Pinterest  int         `json:"pinterest"`
+	Instagram  int         `json:"instagram"`
+	GooglePlus int         `json:"googlePlus"`
+	Linkedin   int         `json:"linkedin"`
+	Rest       int         `json:"rest"`
+	Devices    interface{} `json:"devices"`
+	Refs       interface{} `json:"refs"`
+}
+
+// Response condense both URL and Stats information
+// in order to use just one type in get
 type Response struct {
-	URL `json:"url"`
+	URL   `json:"url"`
+	Stats `json:"stats"`
 }
 
 // New returns a new client
@@ -37,23 +86,23 @@ func New(APIKey string) (*Client, error) {
 }
 
 func (c *Client) get(params url.Values) (Response, error) {
+	// Add the parameters to the base url
 	c.BaseURL.RawQuery = params.Encode()
+	// Make the request to the server
 	r, err := http.Get(c.BaseURL.String())
 	if err != nil {
-		fmt.Println("Errore requester", err.Error())
 		return Response{}, err
 	}
 	defer r.Body.Close()
+	// Read the request
 	contents, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		fmt.Println("Errore reader", err.Error())
 		return Response{}, err
 	}
-	fmt.Println(string(contents))
+	// Unmarshal the request into Response struct
 	var response Response
 	err = json.Unmarshal(contents, &response)
 	if err != nil {
-		fmt.Println("Errore json", err.Error())
 		return Response{}, err
 	}
 
@@ -64,19 +113,45 @@ func (c *Client) get(params url.Values) (Response, error) {
 func (c *Client) Shorten(longURL string, customName string) (URL, error) {
 	// Creates a new set of url parameters
 	v := url.Values{}
-	// The first will be the key, we use Set because it's the first
-	// then we'll add the url we want to shorten and the custon name
+	// We start with the key (we use Set because it's the first)
+	// then we add the url we want to shorten and the custon name
 	v.Set("key", c.Key)
 	v.Add("short", longURL)
 	v.Add("name", customName)
+
 	// Use the internal modular request system in order to get
 	// the url response
 	r, err := c.get(v)
 	if err != nil {
 		return URL{}, fmt.Errorf("Impossible to shorten the url: %s", err.Error())
 	}
-	// Check if the returned status is an actual error
+
+	// Check if the returned status is an actual error (isURL == true)
 	err = checkErrorCode(r.URL.Status, true)
 	// Just return the URL information
 	return r.URL, err
+}
+
+// GetStats get the statistics for a given shortened URL
+func (c *Client) GetStats(shortURL string) (Stats, error) {
+	// Creates a new set of url parameters
+	v := url.Values{}
+	// We start with the key (we use Set because it's the first)
+	// then we add the already shortened url as stats parameter
+	v.Set("key", c.Key)
+	v.Add("stats", shortURL)
+
+	// Use the internal modular request system in order to get
+	// the url response
+	r, err := c.get(v)
+	if err != nil {
+		return Stats{}, fmt.Errorf("Impossible to get the stats: %s", err.Error())
+	}
+
+	// Check if the returned status is an actual error (isURL == false)
+	err = checkErrorCode(r.Stats.Status, false)
+
+	fmt.Println(r.Stats.Devices)
+	// Just return the Stats information
+	return r.Stats, err
 }
