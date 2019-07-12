@@ -151,7 +151,30 @@ func (c *Client) GetStats(shortURL string) (Stats, error) {
 	// Check if the returned status is an actual error (isURL == false)
 	err = checkErrorCode(r.Stats.Status, false)
 
-	fmt.Println(r.Stats.Devices)
+	// IMPORTANT: this is an ugly solution that I must use because the API calls
+	// return an empty array if there's no devices and refs data and an object
+	// otherwise, if they'll change their API in the future I'll modify this part
+
+	// If devices field is not passed as an empty interface (empty array in this case)
+	if _, ok := r.Stats.Devices.([]interface{}); !ok {
+		// Overwrite the old Stats.Devices (made out of map[string]interface{})
+		// with the right data (of Devices type)
+		r.Stats.Devices, err = ForceDevicesToRightType(r.Stats.Devices)
+		if err != nil {
+			return Stats{}, fmt.Errorf("Impossible to get the stats: %s", err.Error())
+		}
+	}
+
+	// If devices field is not passed as an empty interface (empty array in this case)
+	if _, ok := r.Stats.Refs.([]interface{}); !ok {
+		// Overwrite the old Stats.Refs (made out of map[string]interface{})
+		// with the right data (of Refs type)
+		r.Stats.Refs, err = ForceRefsToRightType(r.Stats.Refs)
+		if err != nil {
+			return Stats{}, fmt.Errorf("Impossible to get the stats: %s", err.Error())
+		}
+	}
+
 	// Just return the Stats information
 	return r.Stats, err
 }
